@@ -1,34 +1,34 @@
 ---
-title: "NYPD_Shooting"
+title: "NYC Seasons & Shootings"
 author: "Henry Clay Ver Valen"
-date: "5/21/2021"
+date: "June 6, 2021"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r load-packages, include=FALSE}
 library(tidyverse)
 library(lubridate)
+library(plotly)
 ```
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-First, read in the NYPD Shooting incident data. The CSV file is located in ./data (use setwd to set your
-working directory to the same folder as this Rmd file is located) and the original file can 
-be downloaded at <https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic>.
+First, read in the NYPD Shooting incident data. The CSV file can be downloaded from <https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic>.
 
 You will need tidyverse and lubridate
 install.packages("tidyverse")
 install.packages("lubridate")
+install.packages("plotly")
 library(tidyverse)
 library(lubridate)
-
+library(plotly)
 
 ```{r import_NYPD_data, message = FALSE}
-shooting_data <- read_csv("./data/NYPD_Shooting_Incident_Data__Historic_.csv")
+shooting_data <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
 ```
 
 Now eliminate INCIDENT_KEY and all columns after VIC_RACE and convert OCCUR_DATE to a date data type
@@ -52,50 +52,59 @@ shooting_data_no_missing <- shooting_data %>%
 ```
 
 Group the data by month for both murders and shootings for the first visualization
-```{r group_by_month}
-month_group <- shooting_data %>% group_by(month=format(floor_date(OCCUR_DATE, "month"), format="%m")) %>%
+```{r group_by_month, echo = FALSE, comment = NA, message = FALSE, warning = FALSE}
+month_group <- shooting_data %>% 
+  group_by(
+    year=year(OCCUR_DATE), 
+    month=month(OCCUR_DATE)
+  ) %>%
   summarize(murders = sum(STATISTICAL_MURDER_FLAG, na.rm = TRUE), shootings = length(STATISTICAL_MURDER_FLAG)) %>%
   ungroup()
 ```
   
-First visualization - Shootings and Murders by Month
-``` {r first_viz}
-month_group %>% 
-  ggplot(aes(x = month, y = murders)) + 
-  geom_point(aes(color = "murders")) + 
-  geom_point(aes(y = shootings, color = "shootings")) + 
-  theme(legend.position = "bottom", 
-        axis.text.x = element_text(angle = 90)) + 
-  labs(title = "Shootings and Murders by Month", y = NULL)
+First visualization - Shootings Each Month 
+``` {r first_viz, echo = FALSE, comment = NA, message = FALSE, warning = FALSE}
+ggplotly(
+  ggplot(
+    data = month_group, mapping = aes(x = month, y = shootings)
+  ) + 
+  #geom_point(aes(color = "murders")) + 
+  geom_line(
+    aes(frame = year)
+  ) + 
+  labs(title = "Shootings by Month: 2006 - 2020", y = NULL, x = "Month") + 
+  scale_x_continuous(breaks=c(1,2,3,4,5,6,7,8,9,10,11,12))
+) %>% 
+animation_slider(currentvalue = list(
+    prefix = "Year: ", 
+    font = list(color="black"))
+)
 ```
 
 Group the data by borough and year for murder and shootings for the second visualization
-```{r group_by_boro_and_year}
+```{r group_by_boro_and_year, echo = FALSE, comment = NA, message = FALSE, warning = FALSE}
 boro_group <- shooting_data %>% group_by(BORO, year=year(OCCUR_DATE)) %>%
   summarize(murders = sum(STATISTICAL_MURDER_FLAG, na.rm = TRUE), shootings = length(STATISTICAL_MURDER_FLAG)) %>%
   select(BORO, year, murders, shootings) %>%
   ungroup()
 ```
 
-Second visualization: Murders and shootings by year for Bronx 
-```{r visualize_New_York}
-boro <- "BRONX"
-boro_group %>% 
-  filter(BORO == boro) %>% 
-  ggplot(aes(x = year, y = murders)) + 
-  geom_line(aes(color = "murders")) + 
-  geom_point(aes(color = "murders")) + 
-  geom_line(aes(y = shootings, color = "shootings")) + 
-  geom_point(aes(y = shootings, color = "shootings")) + 
-  theme(legend.position = "bottom", 
-        axis.text.x = element_text(angle = 90)) + 
-  labs(title = str_c("Murders & Shootings in ", boro), y = NULL)
-```
-
 Find the three boroughs with the highest murder counts since 2010
 ```{r worst_boro}
-boro_group %>% filter(year >= 2010) %>% group_by(BORO) %>% summarize(murders = sum(murders)) %>% slice_max(murders, n = 3)
+boro_group %>% filter(year >= 2010) %>% group_by(BORO) %>% summarize(shootings = sum(shootings)) %>% slice_max(shootings, n = 5)
 ```
+
+Second visualization: Murders and shootings by year for each borough 
+```{r visualize_New_York}
+boro_group %>% 
+#  filter(BORO == "BRONX" | BORO == "BROOKLYN") %>% 
+  ggplot(aes(x = year, y = shootings, fill = BORO)) + 
+  geom_col() + 
+  theme(legend.position = "bottom"
+  ) + 
+  labs(title = str_c("Shootings by Borough"), y = NULL, x = "Year")
+```
+
 
 Bias identification: At first I was very interested in seeing how race and age might play out in these shooting incidents, 
 but then realized how fraught with biases both of these were, both my own and in the race identifications available in the data as well as the very broad age groupings that were used.
